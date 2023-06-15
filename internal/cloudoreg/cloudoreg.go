@@ -181,6 +181,7 @@ func (c *Cloudoreg) VerifyAccountAccess(awsARN arn.ARN) (bool, error) {
 	return verified, nil
 }
 
+// ProcessApplicationAuthenticationCreate validates the source and establishes the trust at rhsm-api cloudaccess side
 func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(appAuth *ApplicationAuthenticationCreate) (bool, error) {
 
 	// TODO Fetch Source Application Authentication, as of now a hardcoded username (arn)
@@ -225,6 +226,11 @@ func (c *Cloudoreg) Produce(applicationId string, available bool, err error, hea
 		fmt.Println(err)
 		return err
 	}
+
+	headers = append(headers, kafka.Header{
+		Key:   "event_type",
+		Value: []byte("availability_status"),
+	})
 
 	err = c.sourceStatusProducer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{Topic: &c.sourceStatusTopic, Partition: kafka.PartitionAny},

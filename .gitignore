@@ -28,4 +28,4 @@ logs
 *.out
 
 # local deployment directories
-deployment/
+_deployment/data/

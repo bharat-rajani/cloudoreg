@@ -96,6 +96,12 @@ func LogKafka(logChan chan kafka.LogEvent) {
 func ProcessMessage(msg *kafka.Message) {
 	// Process the message received.
 	fmt.Printf("Message on %s:%s\n", msg.TopicPartition, string(msg.Value))
+
+	// TODO(s)
+	// 1. Parse source message and process applicationauthentication.create
+	// 2. Call AWS API to getCallerIdentity (this verifies that customer's AWS account is reachable and accessible)
+	// 3. Create provider account in cloudaccess
+	// 4. Finally send a kafka message to status topic (with source availability based on above steps)
 	if msg.Headers != nil {
 		fmt.Printf("%% Headers: %v\n", msg.Headers)
 	}

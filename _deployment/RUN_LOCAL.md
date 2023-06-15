@@ -3,18 +3,23 @@ Run postgres, redis, and kafka with net=host
 docker run -d --net=host --name sources-postgres \
     -e POSTGRES_PASSWORD=mysecretpassword \
     -e PGDATA=/var/lib/postgresql/data/pgdata \
-    -v $(pwd)/deployment/data/postgres:/var/lib/postgresql/data postgres
+    -v $(pwd)/_deployment/data/postgres:/var/lib/postgresql/data postgres
 
 docker run --name sources-redis --net=host -d redis
 
 docker run --rm -it --net=host --name=kafka -e RUNTESTS=0 --pull=always lensesio/fast-data-dev
 
 
+```shell
+psql --host=localhost --user=postgres --password
+create database sources_api_go_development;
+```
+
 Clone sources-api-go
 git clone git@github.com:RedHatInsights/sources-api-go.git
 
 change directory to cloned sources-api-go and run:
-source /YOUR_CLONE_DIR/cloudoreg/deployment/env.sh
+source /YOUR_CLONE_DIR/cloudoreg/_deployment/env.sh
 make setup
 make inlinerun
 

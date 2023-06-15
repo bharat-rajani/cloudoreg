@@ -9,8 +9,10 @@ import (
 	"github.com/bharat-rajani/cloudoreg/internal/config"
 	"github.com/bharat-rajani/cloudoreg/internal/rhsmapi"
 	"github.com/bharat-rajani/cloudoreg/internal/service"
+	"github.com/bharat-rajani/cloudoreg/internal/sources"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"log"
+	"net/http"
 	"os"
 	"sync/atomic"
 )
@@ -37,6 +39,7 @@ type Cloudoreg struct {
 	sourceStatusTopic    string
 	awsService           service.AWSService
 	rhsmAPIService       rhsmapi.Broker
+	sourcesService       sources.SourcesService
 }
 
 func NewCloudoreg(ctx context.Context, config *config.Config) (*Cloudoreg, error) {
@@ -57,7 +60,7 @@ func NewCloudoreg(ctx context.Context, config *config.Config) (*Cloudoreg, error
 	}
 
 	rhsmAPIService := rhsmapi.NewBroker(config.RHSMService.URL)
-
+	sourcesServiceImpl := sources.New(http.DefaultClient, config.SourcesService.URL, config.SourcesService.PSK)
 	return &Cloudoreg{
 		sourceEventConsumer:  c,
 		sourceStatusProducer: p,
@@ -65,6 +68,7 @@ func NewCloudoreg(ctx context.Context, config *config.Config) (*Cloudoreg, error
 		sourceStatusTopic:    config.Kafka.SourceStatusTopic,
 		awsService:           &service.AWSServiceImpl{AppSession: appSession},
 		rhsmAPIService:       *rhsmAPIService,
+		sourcesService:       &sourcesServiceImpl,
 	}, nil
 }
 
@@ -86,9 +90,11 @@ func DefaultCloudoregConfig() *config.Config {
 				"go.logs.channel.enable": true,
 			},
 		},
-		RHSMService: struct {
-			URL string `yaml:"url"`
-		}(struct{ URL string }{URL: "some url"}),
+		RHSMService: config.RHSMService{URL: "http://localhost:3344/v1"},
+		SourcesService: config.SourcesService{
+			URL: "http://localhost:4000/api/sources/v3.1",
+			PSK: "",
+		},
 	}
 }
 
@@ -182,11 +188,34 @@ func (c *Cloudoreg) VerifyAccountAccess(awsARN arn.ARN) (bool, error) {
 }
 
 // ProcessApplicationAuthenticationCreate validates the source and establishes the trust at rhsm-api cloudaccess side
-func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(appAuth *ApplicationAuthenticationCreate) (bool, error) {
+func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(ctx context.Context,
+	appAuth *ApplicationAuthenticationCreate, ebsAccount string) (bool, error) {
 
-	// TODO Fetch Source Application Authentication, as of now a hardcoded username (arn)
-	username := "arn:aws:iam::665427542893:role/test-br-diff"
-	parsedArn, err := arn.Parse(username)
+	log.Println("Fetching Application Type ID")
+	validAppTypeID, err := c.sourcesService.GetApplicationTypeIDs(ctx)
+	if err != nil {
+		log.Println("Error while fetching application type id from sources", err)
+	}
+
+	app, err := c.sourcesService.GetApplicationByID(appAuth.ApplicationID.String(), ebsAccount)
+	if err != nil {
+		//here we will wait for all the retry to happen
+		log.Fatal(err)
+		return false, err
+	}
+
+	if validAppTypeID != app.ApplicationTypeID {
+		return false, nil
+	}
+
+	auth, err := c.sourcesService.GetAuthenticationByID(appAuth.AuthenticationID.String(), ebsAccount)
+	if err != nil {
+		//here we will wait for all the retry to happen
+		log.Fatal(err)
+		return false, err
+	}
+
+	parsedArn, err := arn.Parse(auth.Username)
 	if err != nil {
 		return false, err
 	}
@@ -196,15 +225,15 @@ func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(appAuth *ApplicationA
 	}
 
 	if !verified {
-		return false, err
+		return false, fmt.Errorf("arn could not be verified, err: %w", err)
 	}
 
-	// TODO: Create RHSM API account using source id
 	err = c.rhsmAPIService.CreateAccountWithAutoReg(rhsmapi.AccountDetails{
+		Provider:          "AWS",
 		ProviderAccountID: parsedArn.AccountID,
-		SourceID:          "",
+		SourceID:          app.SourceID,
 	})
-	// TODO: If status code is 400/or whatever rhsmapi send in duplicate case then available=false, err=duplicateSource
+
 	if err != nil {
 		return false, err
 	}
@@ -271,8 +300,12 @@ func (c *Cloudoreg) ProcessSourceEventMessage(ctx context.Context, msg *kafka.Me
 			fmt.Println(err)
 			return
 		}
-		available, err := c.ProcessApplicationAuthenticationCreate(&appAuth)
-		headers := ForwardableMessageHeaders(AvailabilityStatusMap[available], msg)
+		ebsAccount, ok := headerMap[HeaderRHSourcesAccountNumber]
+		if !ok {
+			panic("no account number")
+		}
+		available, err := c.ProcessApplicationAuthenticationCreate(ctx, &appAuth, string(ebsAccount.Value))
+		headers := ForwardableMessageHeaders(msg)
 		err = c.Produce(appAuth.ApplicationID.String(), available, err, headers)
 		if err != nil {
 			fmt.Println(err)
@@ -281,14 +314,11 @@ func (c *Cloudoreg) ProcessSourceEventMessage(ctx context.Context, msg *kafka.Me
 	}
 }
 
-func ForwardableMessageHeaders(value string, msg *kafka.Message) []kafka.Header {
+func ForwardableMessageHeaders(msg *kafka.Message) []kafka.Header {
 	var headers []kafka.Header
 	for _, h := range msg.Headers {
 		h := h
 		switch h.Key {
-		case HeaderEventType:
-			h.Value = []byte(value)
-			headers = append(headers, h)
 		case HeaderRHIdentity, HeaderRHSourcesOrgID, HeaderRHSourcesAccountNumber:
 			headers = append(headers, h)
 		}

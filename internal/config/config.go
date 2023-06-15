@@ -17,11 +17,20 @@ type Config struct {
 		Addr string `yaml:"addr"`
 	} `yaml:"httpServer"`
 
-	RHSMService struct {
-		URL string `yaml:"url"`
-	} `yaml:"rhsmService"`
+	RHSMService RHSMService `yaml:"rhsmService"`
+
+	SourcesService SourcesService `yaml:"sourcesService"`
 
 	Kafka KafkaConfig `yaml:"kafka"`
+}
+
+type SourcesService struct {
+	URL string `yaml:"url"`
+	PSK string `yaml:"psk"`
+}
+
+type RHSMService struct {
+	URL string `yaml:"url"`
 }
 
 type KafkaConfig struct {

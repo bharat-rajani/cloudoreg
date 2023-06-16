@@ -10,14 +10,14 @@
   "authentications": [
     {
       "authtype": "cloud-meter-arn",
-      "username": "arn:aws:iam::665427542893:role/TestBRRole",
+      "username": "arn:aws:iam::665427542893:role/cloudoreg-role",
       "resource_type": "application",
       "resource_name": "/insights/platform/cloud-meter"
     }
   ],
   "applications": [
     {
-      "application_type_id": "3",
+      "application_type_id": "2",
       "extra": {
         "hcs": false
       },

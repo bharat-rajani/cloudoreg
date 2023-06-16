@@ -37,8 +37,6 @@ kafka:
 sources:
 	@echo "+$@"
 
-	# Source the deployment config.
-	@. $(PWD)/_deployment/env.sh
 
 	# Setup the clone destination so the operation is idempotent.
 	@rm -rf $(PWD)/cloned/sources-api-go
@@ -52,11 +50,14 @@ sources:
 	@make -C $(PWD)/cloned/sources-api-go setup
 	@make -C $(PWD)/cloned/sources-api-go inlinerun
 
-run: postgres redis kafka sources
+run/dependents: postgres redis kafka sources
+
+run:
+	go run cmd/main.go
 
 bulk-create:
 	@echo "+$@"
 
 	# HTTP request for sources-api
 	@curl -XPOST http://localhost:4000/api/sources/v3.1/bulk_create \
-		-d _deployment/source_body.json -H "x-rh-sources-account-number: 1234466"
+		-d @_deployment/source_body.json -H "x-rh-sources-account-number: 941133"

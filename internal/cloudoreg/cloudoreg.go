@@ -123,6 +123,7 @@ func (c *Cloudoreg) ConsumeAndProcess(ctx context.Context) {
 	}
 	var ops uint64
 	run := true
+	fmt.Println("Cloudoreg is listening to souces topic")
 	for run == true {
 		select {
 		case <-ctx.Done():
@@ -147,7 +148,7 @@ func (c *Cloudoreg) ConsumeAndProcess(ctx context.Context) {
 					fmt.Fprintf(os.Stderr, "Error committing offset after message %s %e:\n",
 						e.TopicPartition, err)
 				}
-				fmt.Printf("Message processed %v\n", topicPartitions)
+				log.Printf("Message processed %v\n", topicPartitions)
 
 			case kafka.Error:
 				fmt.Fprintf(os.Stderr, "Error: %v: %v\n", e.Code(), e)
@@ -159,6 +160,7 @@ func (c *Cloudoreg) ConsumeAndProcess(ctx context.Context) {
 }
 
 func (c *Cloudoreg) VerifyAccountAccess(awsARN arn.ARN) (bool, error) {
+	log.Println("Validating ARN")
 	verified := false
 	credentials, err := c.awsService.AssumeRole(awsARN)
 	if err != nil {
@@ -181,7 +183,7 @@ func (c *Cloudoreg) VerifyAccountAccess(awsARN arn.ARN) (bool, error) {
 	if identityRoot.Account == identity.Account {
 		fmt.Println("WARNING! you are using same account for creation as well as validation of arn")
 	} else {
-		fmt.Println("ARN is validated")
+		log.Println("ARN is validated")
 	}
 
 	return verified, nil
@@ -189,14 +191,14 @@ func (c *Cloudoreg) VerifyAccountAccess(awsARN arn.ARN) (bool, error) {
 
 // ProcessApplicationAuthenticationCreate validates the source and establishes the trust at rhsm-api cloudaccess side
 func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(ctx context.Context,
-	appAuth *ApplicationAuthenticationCreate, ebsAccount string) (bool, error) {
+	appAuth *ApplicationAuthenticationCreate, ebsAccount, orgID string) (bool, error) {
 
-	log.Println("Fetching Application Type ID")
 	validAppTypeID, err := c.sourcesService.GetApplicationTypeIDs(ctx)
 	if err != nil {
 		log.Println("Error while fetching application type id from sources", err)
 	}
 
+	log.Printf("Fetching Application with the given id %s\n", appAuth.ApplicationID.String())
 	app, err := c.sourcesService.GetApplicationByID(appAuth.ApplicationID.String(), ebsAccount)
 	if err != nil {
 		//here we will wait for all the retry to happen
@@ -208,6 +210,7 @@ func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(ctx context.Context,
 		return false, nil
 	}
 
+	log.Printf("Fetching Authentication with the given id %s\n", appAuth.ApplicationID.String())
 	auth, err := c.sourcesService.GetAuthenticationByID(appAuth.AuthenticationID.String(), ebsAccount)
 	if err != nil {
 		//here we will wait for all the retry to happen
@@ -230,6 +233,7 @@ func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(ctx context.Context,
 
 	err = c.rhsmAPIService.CreateAccountWithAutoReg(rhsmapi.AccountDetails{
 		Provider:          "AWS",
+		AccountID:         orgID,
 		ProviderAccountID: parsedArn.AccountID,
 		SourceID:          app.SourceID,
 	})
@@ -243,13 +247,18 @@ func (c *Cloudoreg) ProcessApplicationAuthenticationCreate(ctx context.Context,
 
 func (c *Cloudoreg) Produce(applicationId string, available bool, err error, headers []kafka.Header) error {
 	deliveryChan := make(chan kafka.Event)
+	var errString string
+	if err != nil {
+		errString = err.Error()
+	}
 	data := map[string]interface{}{
 		"resource_type": SOURCES_RESOURCE_TYPE,
 		"resource_id":   applicationId,
 		"status":        AvailabilityStatusMap[available],
-		"error":         err.Error(),
+		"error":         errString,
 	}
-
+	log.Printf("Source's application availability status %s", AvailabilityStatusMap[available])
+	log.Println("Notifying sources about application status by producing kafka message")
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		fmt.Println(err)
@@ -276,7 +285,7 @@ func (c *Cloudoreg) Produce(applicationId string, available bool, err error, hea
 		if messageAck.TopicPartition.Error != nil {
 			return fmt.Errorf("delivery failed: %w", messageAck.TopicPartition.Error)
 		} else {
-			fmt.Printf("Delivered message to topic %s [%d] at offset %v\n",
+			log.Printf("Notified sources on topic %s [%d] at offset %v\n",
 				*messageAck.TopicPartition.Topic, messageAck.TopicPartition.Partition, messageAck.TopicPartition.Offset)
 			return nil
 		}
@@ -304,7 +313,12 @@ func (c *Cloudoreg) ProcessSourceEventMessage(ctx context.Context, msg *kafka.Me
 		if !ok {
 			panic("no account number")
 		}
-		available, err := c.ProcessApplicationAuthenticationCreate(ctx, &appAuth, string(ebsAccount.Value))
+		log.Printf("Received event %s, EBS Account: %s\n", eventType.Value, ebsAccount)
+		orgID, ok := headerMap[HeaderRHSourcesOrgID]
+		if !ok {
+			fmt.Println("Error: no org id number")
+		}
+		available, err := c.ProcessApplicationAuthenticationCreate(ctx, &appAuth, string(ebsAccount.Value), string(orgID.Value))
 		headers := ForwardableMessageHeaders(msg)
 		err = c.Produce(appAuth.ApplicationID.String(), available, err, headers)
 		if err != nil {

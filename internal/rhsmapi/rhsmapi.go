@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -38,6 +39,7 @@ type Broker struct {
 }
 
 func (b *Broker) CreateAccountWithAutoReg(acc AccountDetails) error {
+	log.Println("Establishing trust using RHSM cloudaccess API")
 	endpoint := fmt.Sprintf("/cloud_access_providers/%s/accounts", acc.Provider)
 	reqBody := []AccountDetails{
 		{
@@ -71,6 +73,7 @@ func (b *Broker) CreateAccountWithAutoReg(acc AccountDetails) error {
 		return fmt.Errorf("create accounts failed with status code %d", res.StatusCode)
 	}
 
+	log.Println("Trust established successfully")
 	return nil
 }
 

@@ -16,7 +16,7 @@ Now with cloudigrade being handed over to Teamnado and being stripped off all ot
 ![Proposed architecture](assets/proposed_architecture.svg?raw=true "Proposed architecture")
 
 ### Sequence Diagram
-![Sequence Diagram](assets/cloudoscope-seq-diag.png "Sequence Diagram")
+![Sequence Diagram](assets/cloudoreg-seq-diag.png "Sequence Diagram")
 
 ### Running on local
 Refer to `_deployment/RUN_LOCAL.md`

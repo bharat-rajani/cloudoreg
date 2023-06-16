@@ -5,6 +5,9 @@ bin
 .idea
 .vscode
 
+# Cloned repos
+cloned
+
 # Configs
 configs/configs.yaml
 helm/Chart.lock

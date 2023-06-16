@@ -1,0 +1,27 @@
+{
+  "sources": [
+    {
+      "name": "bharat_test_source",
+      "app_creation_workflow": "manual_configuration",
+      "source_type_name": "amazon"
+    }
+  ],
+  "endpoints": [],
+  "authentications": [
+    {
+      "authtype": "cloud-meter-arn",
+      "username": "arn:aws:iam::665427542893:role/TestBRRole",
+      "resource_type": "application",
+      "resource_name": "/insights/platform/cloud-meter"
+    }
+  ],
+  "applications": [
+    {
+      "application_type_id": "3",
+      "extra": {
+        "hcs": false
+      },
+      "source_name": "bharat_test_source"
+    }
+  ]
+}

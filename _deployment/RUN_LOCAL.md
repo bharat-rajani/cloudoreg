@@ -1,58 +1,6 @@
-Run postgres, redis, and kafka with net=host
-
-docker run -d --net=host --name sources-postgres \
-    -e POSTGRES_PASSWORD=mysecretpassword \
-    -e PGDATA=/var/lib/postgresql/data/pgdata \
-    -v $(pwd)/_deployment/data/postgres:/var/lib/postgresql/data postgres
-
-docker run --name sources-redis --net=host -d redis
-
-docker run --rm -it --net=host --name=kafka -e RUNTESTS=0 --pull=always lensesio/fast-data-dev
-
-
-```shell
-psql --host=localhost --user=postgres --password
-create database sources_api_go_development;
-```
-
-Clone sources-api-go
-git clone git@github.com:RedHatInsights/sources-api-go.git
-
-change directory to cloned sources-api-go and run:
-source /YOUR_CLONE_DIR/cloudoreg/_deployment/env.sh
-make setup
-make inlinerun
-
-
-Create a json file for /bulk_create body
-```json
-{
-  "sources": [
-    {
-      "name": "bharat_test_source",
-      "app_creation_workflow": "manual_configuration",
-      "source_type_name": "amazon"
-    }
-  ],
-  "endpoints": [],
-  "authentications": [
-    {
-      "authtype": "cloud-meter-arn",
-      "username": "arn:aws:iam::665427542893:role/TestBRRole",
-      "resource_type": "application",
-      "resource_name": "/insights/platform/cloud-meter"
-    }
-  ],
-  "applications": [
-    {
-      "application_type_id": "3",
-      "extra": {
-        "hcs": false
-      },
-      "source_name": "bharat_test_source"
-    }
-  ]
-}
-
-```
-curl -XPOST localhost:4000/api/sources/v3.1/bulk_create -d @/tmp/sourceBody.json -H "x-rh-sources-account-number: 1234466"
+To run locally:  
+1. Source the required configs: `source _deployment/env.sh`
+2. Execute: `make run`  
+This will run `sources-api` along with all its dependencies. This is a blocking call.
+3. In a separate terminal, execute: ```make bulk_create```  
+This will send the http request to sources-api.

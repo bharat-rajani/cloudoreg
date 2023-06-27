@@ -1,0 +1,7 @@
+---
+version: '3'
+
+services:
+  lensesio-fast-data-dev:
+    image: lensesio/fast-data-dev
+    container_name: lensesio-fast-data-dev
